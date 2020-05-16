@@ -2,14 +2,14 @@ import merge from 'lodash/merge'
 import { makeExecutableSchema } from 'apollo-server-express'
 import * as user from './user'
 import * as item from './item'
-import * as collection from './collection'
+import * as kit from './kit'
 
 const schema = makeExecutableSchema({
-  typeDefs: [user.typeDefs, item.typeDefs, collection.typeDefs],
+  typeDefs: [user.typeDefs, item.typeDefs, kit.typeDefs],
   resolvers: merge(
 	user.resolvers,
 	item.resolvers,
-	collection.resolvers
+	kit.resolvers
   )
 });
 

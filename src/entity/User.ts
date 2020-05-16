@@ -7,7 +7,7 @@ import {
 	OneToMany,
 	UpdateDateColumn
 } from 'typeorm'
-import Collection from './Collection'
+import Kit from './Kit'
 import jwt from 'jsonwebtoken'
 
 @Entity()
@@ -20,18 +20,21 @@ export default class User extends BaseEntity {
 	
 	@Column({ nullable: true })
     email: string
+
+    @Column({ nullable: true })
+    password: string
 	
-	@Column({ nullable: true })
+	@Column({ nullable: true, default: false })
     isAdmin: boolean
 	
 	@Column({ nullable: true })
-    profilePhoto: string
-	
-	@Column({ nullable: true })
-    strategy: string
+    profileImage: string
 	
 	@Column({ nullable: true })
     googleId: string
+
+    @Column({ nullable: true })
+    kakaoId: string
 
     @CreateDateColumn({ type: 'timestamp' })
     created_at: Date
@@ -39,7 +42,7 @@ export default class User extends BaseEntity {
 	@UpdateDateColumn({ type: 'timestamp' })
     updated_at: Date
 	
-	@OneToMany(type => Collection, collection => collection.member, { cascade: true, onDelete: 'CASCADE' })
-    collections: Collection[];
+	@OneToMany(type => Kit, kit => kit.member, { cascade: true, onDelete: 'CASCADE' })
+    Kits: Kit[];
 
 }

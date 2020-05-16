@@ -8,7 +8,7 @@ import {
     ManyToOne
 } from 'typeorm'
 import User from './User'
-import Collection from './Collection'
+import Kit from './Kit'
 
 @Entity()
 export default class Item extends BaseEntity {
@@ -33,6 +33,6 @@ export default class Item extends BaseEntity {
 	@Column("uuid")
 	creator_id!: string
 	
-	@ManyToOne(type => Collection, collection => collection.items, { cascade: true, onDelete: "CASCADE" })
-	collection: Collection
+	@ManyToOne(type => Kit, kit => kit.items, { cascade: true, onDelete: "CASCADE" })
+	kit: Kit
 }

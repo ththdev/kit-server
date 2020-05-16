@@ -1,61 +1,51 @@
 import { gql, ApolloError } from 'apollo-server-express'
 import { getRepository } from 'typeorm'
 import User from '../entity/User'
-import Collection from '../entity/Collection'
-import * as collection from './collection'
+import Kit from '../entity/Kit'
+import * as kit from './kit'
 import jwt from 'jsonwebtoken'
-
-import { getGoogleProfile } from '../lib/social/google'
+import { decode } from 'punycode'
 
 export const typeDefs = gql`
     type User {
         id: ID!
         name: String
 		email: String
-		profilePhoto: String
+		kakaoId: String,
+		googleId: String,
+		profileImage: String
 		isAdmin: Boolean
-		strategy: String
         created_at: Date
 		updated_at: Date
-		collections: [Collection]
+		Kits: [Kit]
     }
 
     scalar Date
 
 	type Token {
 		token: String
-		name: String
 	}
 
     type Query {
         users: [User]
-		userById(id: String): User
+		userById(id: String!): User
+		currentUser(token: String!): User
     }
 
     type Mutation {
-        register(
-			name: String!,
-			email: String!,
-			strategy: String!,
-			isAdmin: Boolean,
-			profilePhoto: String
-		): Boolean
+        register(name: String!, email: String!, password: String!, isAdmin: Boolean, profileImage: String): Token,
         editUser(id: ID!, name: String): User
         deleteUser(id: ID): Boolean
-		googleLogin(
-			name: String!,
-			email: String!,
-			googleId: String!,
-			profilePhoto: String,
-		): Token
+		googleLogin(name: String!, email: String, googleId: String!, profileImage: String): Token
+		kakaoLogin(name: String!, email: String, kakaoId: String!, profileImage: String): Token
     }
 `
 
 export const resolvers = {
 	User: {
-		collections: async (parent: User) => {
-			const collectionRepo = getRepository(Collection)
-			const collections = await collectionRepo.find({ 
+		Kits: async (parent: User) => {
+			const KitRepo = getRepository(Kit)
+			const Kits = await KitRepo.find({ 
 				relations: ["member"],
 				where: {
 					member: {
@@ -64,7 +54,7 @@ export const resolvers = {
 				}
 			});
 			
-			return collections
+			return Kits
 		}	
 	},
     Query: {
@@ -80,40 +70,45 @@ export const resolvers = {
 			const user = await userRepo.find(id);
 			
 			return user
+		},
+		currentUser: async (_:any, args: any) => {
+			const { token } = args;
+			const userRepo = getRepository(User);
+			
+			// desieralize token
+			const decoded = jwt.verify(token, process.env.PRIVATE_KEY);
+			const user = await userRepo.findOne({ id: decoded.id });
+
+			if (!user) return new ApolloError("Can't find user");
+
+			return user
 		}
     },
     Mutation: {
         register: async (_:any, args: any) => {
-            const {
-				name,
-				email,
-				strategy,
-				isAdmin,
-				profilePhoto
-			} = args;
+            const { name, email, password, isAdmin, profileImage } = args;
             const userRepo = getRepository(User);
-			const collectionRepo = getRepository(Collection)
 			
 			const newUser = new User();
 			newUser.name = name;
 			newUser.email = email;
-			newUser.profilePhoto = profilePhoto;
+			newUser.password = password;
+			newUser.profileImage = profileImage;
 			newUser.isAdmin = isAdmin;
-			newUser.strategy = strategy;
-			
-			await userRepo.save(newUser)
-			
-			// Create Void Collection
-			const createdUser = await userRepo.findOne({ name: name })
-			
-			const voidCollection = new Collection();
-			voidCollection.name = "Void"
-			voidCollection.creator_id = createdUser.id
-			voidCollection.member = createdUser
-			
-			await collectionRepo.save(voidCollection);
-			
-            return true
+
+			try {
+				await userRepo.save(newUser);
+
+				const registered = await userRepo.findOne({ email });
+				const token = jwt.sign({
+					id: registered.id,
+					exist: 3000
+				}, process.env.PRIVATE_KEY);
+
+				return token
+			} catch (e) {
+				throw new ApolloError("Sorry, Can't Register");
+			}
         },
         editUser: async(_:any, args: any) => {
             const { id, name, email, gender } = args;
@@ -138,44 +133,76 @@ export const resolvers = {
             return true 
         },
 		googleLogin: async (_:any, args: any) => {
-			const { name, email, googleId, profilePhoto } = args;
+			const { name, email, googleId, profileImage } = args;
 			const userRepo = getRepository(User);
-			const exist = await userRepo.findOne({ email: email, googleId: googleId });
-			
+			const exist = await userRepo.findOne({ googleId });
+
 			// Login Process
 			if (exist) {
 				const token = jwt.sign({
 					id: exist.id,
 					exist: 3000
 				}, process.env.PRIVATE_KEY);
-				
-				return token
-			} 
-			
+
+				return { token }
+			}
+
 			// Register Process
-			const newUser = new User();
-			newUser.name = name;
-			newUser.email = email;
-			newUser.profilePhoto = profilePhoto;
-			newUser.googleId = googleId;
-			newUser.strategy = "Google"
-			
+			const newGoogleUser = new User();
+			newGoogleUser.name = name;
+			newGoogleUser.email = email;
+			newGoogleUser.profileImage = profileImage;
+			newGoogleUser.googleId = googleId
+
 			try {
-				await userRepo.save(newUser);
-				
+				await userRepo.save(newGoogleUser);
+
 				const registered = await userRepo.findOne({ googleId });
 				const token = jwt.sign({
 					id: registered.id,
 					exist: 3000
 				}, process.env.PRIVATE_KEY);
-				
-				return token
+
+				return { token }
 			} catch (e) {
-				
+				throw new ApolloError("Sorry, Can't Register");
 			}
-			
-			
-			throw new ApolloError('You need to register');
+		},
+		kakaoLogin: async (_:any, args: any) => {
+			const { name, email, kakaoId, profileImage } = args;
+			const userRepo = getRepository(User);
+			const exist = await userRepo.findOne({ kakaoId });
+
+			// Login Process
+			if (exist) {
+				const token = jwt.sign({
+					id: exist.id,
+					exist: 3000
+				}, process.env.PRIVATE_KEY);
+
+				return { token }
+			}
+
+			// Register Process
+			const newKakaoUser = new User();
+			newKakaoUser.name = name;
+			newKakaoUser.email = email;
+			newKakaoUser.profileImage = profileImage;
+			newKakaoUser.kakaoId = kakaoId
+
+			try {
+				await userRepo.save(newKakaoUser);
+
+				const registered = await userRepo.findOne({ kakaoId });
+				const token = jwt.sign({
+					id: registered.id,
+					exist: 3000
+				}, process.env.PRIVATE_KEY);
+
+				return { token }
+			} catch (e) {
+				throw new ApolloError("Sorry, Can't Register");
+			}
 		}
     }
 }
